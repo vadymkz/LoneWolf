@@ -24,6 +24,7 @@ def create_tables() -> None:
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS vacancies (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 posted_at TEXT,
                 title TEXT,
                 description TEXT,
@@ -37,12 +38,8 @@ def create_tables() -> None:
         conn.commit()
 
 
-def get_vacancies(source: str = "", is_checked=True) -> list:
-    query = "SELECT * FROM vacancies"
-    if is_checked:
-        query += " WHERE checked=1"
-    if source:
-        query += f" AND source='{source}'"
+def get_vacancies(source: str) -> list:
+    query = f"SELECT * FROM vacancies WHERE source='{source}'"
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute(query)

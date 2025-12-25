@@ -25,6 +25,7 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+sqlite.db
 
 # FastAPI / DB / Logs
 *.log
