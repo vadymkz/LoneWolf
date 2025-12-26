@@ -11,18 +11,6 @@ class Vacancy(BaseModel):
     salary: str
     checked: int = 0
 
-    def to_dict(self) -> dict:
-        return {
-            "posted_at": self.posted_at,
-            "title": self.title,
-            "description": self.description,
-            "link": self.link,
-            "company": self.company,
-            "source": self.source,
-            "salary": self.salary,
-            "checked": self.checked
-        }
-
     def to_tuple(self):
         """Return a tuple in the order expected for executemany."""
         return (

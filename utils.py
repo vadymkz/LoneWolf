@@ -1,10 +1,10 @@
 import re
 
-from settings import EXCLUDE_FROM_TITLE, EXCLUDE_FROM_COMPANY_NAME, MINIMAL_SALARY
+from settings import EXCLUDE_FROM_TITLE, EXCLUDE_FROM_COMPANY_NAME, MINIMAL_SALARY, MAX_SALARY
 
 
 def normalize_label(label: str) -> str:
-    for symbol in ["(", ")", "[", "]"]:
+    for symbol in ["(", ")", "[", "]", ",", '"', "`"]:
         label = label.replace(symbol, "")
     label = label.replace("/", " ")
     return label
@@ -33,3 +33,12 @@ def is_small_salary(salary: str) -> bool:
     if not numbers:
         return False
     return max(numbers) < MINIMAL_SALARY
+
+
+def is_high_salary(salary: str) -> bool:
+    if not salary:
+        return False
+    numbers = [float(n.replace(',', '')) for n in re.findall(r'\d+\.?\d*', salary)]
+    if not numbers:
+        return False
+    return any(n >= MAX_SALARY for n in numbers)

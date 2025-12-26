@@ -1,13 +1,17 @@
 import requests
 from bs4 import BeautifulSoup
-from fastapi import FastAPI
+from main import app
 
 from models import Vacancy
-from utils import title_has_excluded_words, company_has_excluded_words, is_small_salary, normalize_description
+from utils import (
+    title_has_excluded_words,
+    company_has_excluded_words,
+    is_small_salary,
+    normalize_description,
+    is_high_salary
+)
 from database import get_vacancies, insert_vacancies
-from logger import logger
-
-app = FastAPI()
+from logger import logger, log_scraper_results
 
 BASE = "https://jobs.dou.ua"
 BASE_URL = f"{BASE}/vacancies/"
@@ -60,15 +64,16 @@ def parse_html(html):
         posted_at_tag = v.select_one("div.date")
         link = title_tag["href"].replace("?from=list_hot", "")
 
-        vacancies.append(Vacancy(
-            posted_at=posted_at_tag.get_text(strip=True) or "",
+        vacancy = Vacancy(
+            posted_at=posted_at_tag.get_text(strip=True) if posted_at_tag else "",
             title=title_tag.get_text(strip=True),
             description=normalize_description(description_tag.get_text(strip=True) or ""),
             link=link,
-            company=company_tag.get_text(strip=True) or "",
-            salary=salary_tag.get_text(strip=True) or "",
-            source="dou"
-        ))
+            company=company_tag.get_text(strip=True) if company_tag else "",
+            source="dou",
+            salary=salary_tag.get_text(strip=True) if salary_tag else ""
+        )
+        vacancies.append(vacancy)
 
     return vacancies
 
@@ -91,11 +96,7 @@ def scrape_dou():
 
     vacancies = []
     for html in htmls:
-        batch = parse_html(html)
-        vacancies.extend(batch)
-
-    checked_links = {v["link"] for v in get_vacancies("dou")}
-    vacancies = [v for v in vacancies if v.link not in checked_links]
+        vacancies.extend(parse_html(html))
     return vacancies
 
 
@@ -110,19 +111,20 @@ def get_dou():
     for v in all_vacancies:
         if v.link in checked_links:
             continue
-        if title_has_excluded_words(v.title) or company_has_excluded_words(v.company) or is_small_salary(v.salary):
+        if (
+            title_has_excluded_words(v.title) or
+            company_has_excluded_words(v.company) or
+            is_small_salary(v.salary) or
+            is_high_salary(v.salary)
+        ):
             skipped_num += 1
             continue
         new_vacancies.append(v)
 
-    if skipped_num:
-        logger.info(f"Filtered total: {skipped_num}")
-
     if new_vacancies_num := len(new_vacancies):
         insert_vacancies(new_vacancies)
-        logger.info(f"Added {new_vacancies_num} new vacancies")
-    elif skipped_num:
-        logger.info("No new vacancies")
+
+    log_scraper_results(skipped_num, new_vacancies_num)
 
     return {"stored": new_vacancies_num}
 
