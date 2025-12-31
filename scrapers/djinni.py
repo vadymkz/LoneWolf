@@ -1,4 +1,3 @@
-import httpx
 import asyncio
 
 from main import app
@@ -23,7 +22,7 @@ class DjinniScraper(BaseScraper):
         super().__init__('Djinni')
 
     @staticmethod
-    async def get_total_pages(html_content: str) -> int:
+    def get_total_pages(html_content: str) -> int:
         soup = BeautifulSoup(html_content, 'html.parser')
         pagination = soup.find('ul', class_='pagination')
         if not pagination:
@@ -37,7 +36,7 @@ class DjinniScraper(BaseScraper):
                 pages.append(int(text))
         return max(pages) if pages else 1
 
-    async def parse_page_to_models(self, html_content: str) -> List[Vacancy]:
+    def parse_page_to_models(self, html_content: str) -> List[Vacancy]:
         soup = BeautifulSoup(html_content, 'html.parser')
         vacancies = []
 
@@ -60,21 +59,19 @@ class DjinniScraper(BaseScraper):
             time_tag = item.select_one('.text-secondary .text-nowrap:last-child')
             posted_at = time_tag.get_text(strip=True) if time_tag else ""
 
-            vacancy = Vacancy(
+            vacancies.append(self.create_vacancy(
                 posted_at=posted_at,
                 title=title_tag.get_text(strip=True),
                 description=normalize_description(description),
                 link="https://djinni.co" + title_tag['href'],
                 company=company_name,
-                source=self.source.lower(),
                 salary=salary_text
-            )
-            vacancies.append(vacancy)
+            ))
 
         return vacancies
 
     async def scrape(self) -> List[Vacancy]:
-        async with await self.get_http_client(HEADERS) as client:
+        async with self.get_http_client(HEADERS) as client:
             login_page = await client.get(LOGIN_URL)
             login_soup = BeautifulSoup(login_page.text, 'html.parser')
             csrf_token = login_soup.find('input', dict(name='csrfmiddlewaretoken'))['value']
@@ -86,17 +83,17 @@ class DjinniScraper(BaseScraper):
             }, headers={"Referer": LOGIN_URL})
 
             first_page_resp = await client.get(BASE_JOBS_URL)
-            total_pages = await self.get_total_pages(first_page_resp.text)
+            total_pages = self.get_total_pages(first_page_resp.text)
 
             htmls = [first_page_resp.text]
             if total_pages > 1:
                 sem = asyncio.Semaphore(1)
-                htmls.append(await asyncio.gather(*[
+                htmls.extend(await asyncio.gather(*[
                     self.fetch_with_pause(client, f"{BASE_JOBS_URL}&page={page_num}", sem)
                     for page_num in range(2, total_pages + 1)
                 ]))
 
-        vacancies = await self.htmls_to_vacancies(htmls)
+        vacancies = self.htmls_to_vacancies(htmls)
         return vacancies
 
 

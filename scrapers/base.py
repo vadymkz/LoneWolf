@@ -6,7 +6,9 @@ from models import Vacancy
 from abc import ABC, abstractmethod
 from logger import logger, log_scraper_results
 from database import get_vacancies, insert_vacancies
-from utils import title_has_excluded_words, is_high_salary, is_small_salary, company_has_excluded_words
+from utils import (
+    title_has_excluded_words, is_high_salary, is_small_salary, company_has_excluded_words, normalize_description
+)
 
 
 class BaseScraper(ABC):
@@ -19,19 +21,37 @@ class BaseScraper(ABC):
         pass
 
     @abstractmethod
-    async def parse_page_to_models(self, html: str) -> List[Vacancy]:
+    def parse_page_to_models(self, html: str) -> List[Vacancy]:
         pass
 
     @staticmethod
-    async def get_http_client(headers: dict) -> httpx.AsyncClient:
+    def get_http_client(headers: dict) -> httpx.AsyncClient:
         return httpx.AsyncClient(follow_redirects=True, timeout=5.0, headers=headers)
 
-    async def htmls_to_vacancies(self, htmls) -> List[Vacancy]:
+    def create_vacancy(
+        self,
+        posted_at: str,
+        title: str,
+        description: str,
+        link: str,
+        company: str,
+        salary: str
+    ):
+        vacancy = Vacancy(
+            posted_at=posted_at,
+            title=title,
+            description=normalize_description(description),
+            link=link,
+            company=company,
+            source=self.source.lower(),
+            salary=salary
+        )
+        return vacancy
+
+    def htmls_to_vacancies(self, htmls) -> List[Vacancy]:
         if not htmls:
             return []
-        pages_vacancies = await asyncio.gather(*[self.parse_page_to_models(html) for html in htmls])
-        vacancies = [v for page_vacancies in pages_vacancies for v in page_vacancies if v]
-        return vacancies
+        return [v for html in htmls for v in self.parse_page_to_models(html)]
 
     @staticmethod
     async def fetch_with_pause(client: httpx.AsyncClient, url: str, sem: asyncio.Semaphore) -> str:

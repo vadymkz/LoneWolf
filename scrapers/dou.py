@@ -1,4 +1,3 @@
-import httpx
 import asyncio
 
 from main import app
@@ -6,7 +5,6 @@ from typing import List
 from models import Vacancy
 from base import BaseScraper
 from bs4 import BeautifulSoup
-from utils import normalize_description
 
 BASE = "https://jobs.dou.ua"
 BASE_URL = f"{BASE}/vacancies/"
@@ -41,7 +39,7 @@ class DOUScraper(BaseScraper):
             json_data = resp.json()
             return json_data.get("html", "").strip(), json_data.get("last", False)
 
-    async def parse_page_to_models(self, html):
+    def parse_page_to_models(self, html):
         soup = BeautifulSoup(html, "html.parser")
         vacancies = []
 
@@ -56,21 +54,19 @@ class DOUScraper(BaseScraper):
             posted_at_tag = v.select_one("div.date")
             link = title_tag["href"].replace("?from=list_hot", "")
 
-            vacancy = Vacancy(
+            vacancies.append(self.create_vacancy(
                 posted_at=posted_at_tag.get_text(strip=True) if posted_at_tag else "",
                 title=title_tag.get_text(strip=True),
-                description=normalize_description(description_tag.get_text(strip=True) or ""),
+                description=description_tag.get_text(strip=True) or "",
                 link=link,
                 company=company_tag.get_text(strip=True) if company_tag else "",
-                source=self.source.lower(),
                 salary=salary_tag.get_text(strip=True) if salary_tag else ""
-            )
-            vacancies.append(vacancy)
+            ))
 
         return vacancies
 
     async def scrape(self) -> List[Vacancy]:
-        async with await self.get_http_client(HEADERS) as client:
+        async with self.get_http_client(HEADERS) as client:
             main_page = await client.get(f"{BASE_URL}?category={CATEGORY}")
             main_page_soup = BeautifulSoup(main_page.text, 'html.parser')
             token_tag = main_page_soup.select_one("input[name=csrfmiddlewaretoken]")
@@ -87,8 +83,8 @@ class DOUScraper(BaseScraper):
                 tasks = [self.fetch_dou_batch(client, csrf_token, sem, count=count + batch_size * i) for i in range(2)]
                 stop = False
 
-                for coro in asyncio.as_completed(tasks):
-                    html, last = await coro
+                for task in asyncio.as_completed(tasks):
+                    html, last = await task
                     if html:
                         htmls.append(html)
                     if not html or last:
@@ -98,7 +94,7 @@ class DOUScraper(BaseScraper):
                 if stop:
                     break
 
-        vacancies = await self.htmls_to_vacancies(htmls)
+        vacancies = self.htmls_to_vacancies(htmls)
         return vacancies
 
 
