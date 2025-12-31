@@ -1,17 +1,12 @@
-import requests
-from bs4 import BeautifulSoup
-from main import app
+import httpx
+import asyncio
 
+from main import app
+from typing import List
 from models import Vacancy
-from utils import (
-    title_has_excluded_words,
-    company_has_excluded_words,
-    is_small_salary,
-    normalize_description,
-    is_high_salary
-)
-from database import get_vacancies, insert_vacancies
-from logger import logger, log_scraper_results
+from base import BaseScraper
+from bs4 import BeautifulSoup
+from utils import normalize_description
 
 BASE = "https://jobs.dou.ua"
 BASE_URL = f"{BASE}/vacancies/"
@@ -29,105 +24,89 @@ HEADERS = {
 }
 
 
-def get_session_and_csrf():
-    """Get a requests session and CSRF token."""
-    session = requests.Session()
-    resp = session.get(f"{BASE_URL}?category={CATEGORY}", headers=HEADERS)
-    soup = BeautifulSoup(resp.text, "html.parser")
-    token_tag = soup.select_one("input[name=csrfmiddlewaretoken]")
-    token = token_tag["value"] if token_tag else ""
-    return session, token
+class DOUScraper(BaseScraper):
+    def __init__(self):
+        super().__init__('DOU')
 
+    @staticmethod
+    async def fetch_dou_batch(session, csrf_token, sem, count=20):
+        async with sem:
+            await asyncio.sleep(0.7)
+            data = {"csrfmiddlewaretoken": csrf_token, "count": count}
+            resp = await session.post(
+                f"{BASE}/vacancies/xhr-load/?category={CATEGORY}", data=data, headers=HEADERS, timeout=10
+            )
+            if resp.status_code != 200:
+                return None, False
+            json_data = resp.json()
+            return json_data.get("html", "").strip(), json_data.get("last", False)
 
-def fetch_batch(session, csrf_token, count=20):
-    """Fetch a single batch of vacancies via xhr-load."""
-    data = {"csrfmiddlewaretoken": csrf_token, "count": count}
-    resp = session.post(f"{BASE}/vacancies/xhr-load/?category={CATEGORY}", data=data, headers=HEADERS)
-    if resp.status_code != 200:
-        return None, False
-    json_data = resp.json()
-    return json_data.get("html", ""), json_data.get("last", False)
+    async def parse_page_to_models(self, html):
+        soup = BeautifulSoup(html, "html.parser")
+        vacancies = []
 
+        for v in soup.select("li.l-vacancy"):
+            title_tag = v.select_one("div.title a.vt")
+            if not title_tag:
+                continue
 
-def parse_html(html):
-    soup = BeautifulSoup(html, "html.parser")
-    vacancies = []
+            company_tag = v.select_one("div.title a.company")
+            salary_tag = v.select_one("div.title span.salary")
+            description_tag = v.select_one("div.sh-info")
+            posted_at_tag = v.select_one("div.date")
+            link = title_tag["href"].replace("?from=list_hot", "")
 
-    for v in soup.select("li.l-vacancy"):
-        title_tag = v.select_one("div.title a.vt")
-        if not title_tag:
-            continue
+            vacancy = Vacancy(
+                posted_at=posted_at_tag.get_text(strip=True) if posted_at_tag else "",
+                title=title_tag.get_text(strip=True),
+                description=normalize_description(description_tag.get_text(strip=True) or ""),
+                link=link,
+                company=company_tag.get_text(strip=True) if company_tag else "",
+                source=self.source.lower(),
+                salary=salary_tag.get_text(strip=True) if salary_tag else ""
+            )
+            vacancies.append(vacancy)
 
-        company_tag = v.select_one("div.title a.company")
-        salary_tag = v.select_one("div.title span.salary")
-        description_tag = v.select_one("div.sh-info")
-        posted_at_tag = v.select_one("div.date")
-        link = title_tag["href"].replace("?from=list_hot", "")
+        return vacancies
 
-        vacancy = Vacancy(
-            posted_at=posted_at_tag.get_text(strip=True) if posted_at_tag else "",
-            title=title_tag.get_text(strip=True),
-            description=normalize_description(description_tag.get_text(strip=True) or ""),
-            link=link,
-            company=company_tag.get_text(strip=True) if company_tag else "",
-            source="dou",
-            salary=salary_tag.get_text(strip=True) if salary_tag else ""
-        )
-        vacancies.append(vacancy)
+    async def scrape(self) -> List[Vacancy]:
+        async with await self.get_http_client(HEADERS) as client:
+            main_page = await client.get(f"{BASE_URL}?category={CATEGORY}")
+            main_page_soup = BeautifulSoup(main_page.text, 'html.parser')
+            token_tag = main_page_soup.select_one("input[name=csrfmiddlewaretoken]")
+            csrf_token = token_tag["value"] if token_tag else ""
+            if not csrf_token:
+                raise RuntimeError("DOU CSRF token not found.")
 
-    return vacancies
+            htmls = [str(BeautifulSoup(main_page.text, "html.parser"))]
+            count = 40
+            batch_size = 40
+            sem = asyncio.Semaphore(1)
 
+            while True:
+                tasks = [self.fetch_dou_batch(client, csrf_token, sem, count=count + batch_size * i) for i in range(2)]
+                stop = False
 
-def scrape_dou():
-    session, csrf_token = get_session_and_csrf()
+                for coro in asyncio.as_completed(tasks):
+                    html, last = await coro
+                    if html:
+                        htmls.append(html)
+                    if not html or last:
+                        stop = True
 
-    resp = session.get(f"{BASE_URL}?category={CATEGORY}", headers=HEADERS)
-    htmls = [str(BeautifulSoup(resp.text, "html.parser"))]
+                count += batch_size * len(tasks)
+                if stop:
+                    break
 
-    count = 40
-    while True:
-        html, last = fetch_batch(session, csrf_token, count=count)
-        count += 40
-        if not html:
-            break
-        htmls.append(html)
-        if last:
-            break
-
-    vacancies = []
-    for html in htmls:
-        vacancies.extend(parse_html(html))
-    return vacancies
+        vacancies = await self.htmls_to_vacancies(htmls)
+        return vacancies
 
 
 @app.get("/dou")
-def get_dou():
-    logger.info("Scraping DOU...")
-    all_vacancies = scrape_dou()
-    checked_links = {v["link"] for v in get_vacancies("dou")}
-    new_vacancies = []
-    skipped_num = 0
-
-    for v in all_vacancies:
-        if v.link in checked_links:
-            continue
-        if (
-            title_has_excluded_words(v.title) or
-            company_has_excluded_words(v.company) or
-            is_small_salary(v.salary) or
-            is_high_salary(v.salary)
-        ):
-            skipped_num += 1
-            continue
-        new_vacancies.append(v)
-
-    if new_vacancies_num := len(new_vacancies):
-        insert_vacancies(new_vacancies)
-
-    log_scraper_results(skipped_num, new_vacancies_num)
-
-    return {"stored": new_vacancies_num}
+async def get_dou():
+    result = await DOUScraper().save_results()
+    return result
 
 
 if __name__ == "__main__":
-    get_dou()
+    print(asyncio.run(get_dou()))
