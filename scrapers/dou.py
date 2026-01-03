@@ -1,10 +1,9 @@
 import asyncio
 
-from main import app
 from typing import List
 from models import Vacancy
-from base import BaseScraper
 from bs4 import BeautifulSoup
+from scrapers.base import BaseScraper
 
 BASE = "https://jobs.dou.ua"
 BASE_URL = f"{BASE}/vacancies/"
@@ -98,11 +97,7 @@ class DOUScraper(BaseScraper):
         return vacancies
 
 
-@app.get("/dou")
-async def get_dou():
-    result = await DOUScraper().save_results()
-    return result
-
-
 if __name__ == "__main__":
-    print(asyncio.run(get_dou()))
+    async def get_djinni():
+        return await DOUScraper().run()
+    print(asyncio.run(get_djinni()))

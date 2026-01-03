@@ -1,10 +1,9 @@
 import asyncio
 
-from main import app
 from typing import List
 from models import Vacancy
-from base import BaseScraper
 from bs4 import BeautifulSoup
+from scrapers.base import BaseScraper
 from utils import normalize_description
 from settings import DJINNI_LOGIN, DJINNI_PASSWORD
 
@@ -97,11 +96,7 @@ class DjinniScraper(BaseScraper):
         return vacancies
 
 
-@app.get("/djinni")
-async def get_djinni():
-    result = await DjinniScraper().save_results()
-    return result
-
-
 if __name__ == "__main__":
+    async def get_djinni():
+        return await DjinniScraper().run()
     print(asyncio.run(get_djinni()))

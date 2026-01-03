@@ -60,9 +60,9 @@ class BaseScraper(ABC):
             resp = await client.get(url)
             return resp.text
 
-    async def save_results(self) -> dict:
+    async def run(self) -> dict:
         all_vacancies = await self.scrape()
-        checked_links = {v["link"] for v in get_vacancies(self.source.lower())}
+        checked_links = {v["link"] for v in await get_vacancies(self.source.lower())}
         new_vacancies = []
         skipped_num = 0
 
@@ -80,7 +80,7 @@ class BaseScraper(ABC):
             new_vacancies.append(v)
 
         if new_vacancies_num := len(new_vacancies):
-            insert_vacancies(new_vacancies)
+            await insert_vacancies(new_vacancies)
 
         log_scraper_results(skipped_num, new_vacancies_num)
 
