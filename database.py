@@ -50,7 +50,7 @@ async def insert_vacancies(vacancies: list[Vacancy]):
     async with get_connection() as conn:
         cursor = await conn.cursor()
         values = [vacancy.to_tuple() for vacancy in vacancies]
-        cursor.executemany("""
+        await cursor.executemany("""
             INSERT INTO vacancies (
                 posted_at,
                 title,
