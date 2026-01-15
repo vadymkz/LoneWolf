@@ -7,7 +7,7 @@ EXCLUDE_FROM_TITLE = [
     'Science', 'Head', 'Lead', 'Node', 'Java', 'drone', 'trainee', 'junior', 'Leader', 'Principal', 'test', 'DevOps',
     'c++', 'с++', 'math', 'Platform', 'Algorithms', 'Kubernetes', 'Architect', 'Intern', 'NumPy', 'Vision',
     'UAE', 'Yii', 'Embedded', 'Big Data', 'office', 'Vue.JS', 'Azure', 'freelance', 'analyst', 'Go', 'Robotics', 'rust',
-    'Airflow', 'Golang', 'React'
+    'Airflow', 'Golang', 'React', 'PySpark', 'Databricks', 'AQA', 'Front end'
 ]
 EXCLUDE_FROM_TITLE = {s.lower() for s in EXCLUDE_FROM_TITLE}
 
