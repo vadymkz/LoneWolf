@@ -11,7 +11,7 @@ EXCLUDE_FROM_TITLE = [
 ]
 EXCLUDE_FROM_TITLE = {s.lower() for s in EXCLUDE_FROM_TITLE}
 
-EXCLUDE_FROM_COMPANY_NAME = ['ajax', 'моу', 'Defence', 'Камера', 'ЗАЗМІК', 'Warbirds']
+EXCLUDE_FROM_COMPANY_NAME = ['ajax', 'моу', 'Defence', 'Камера', 'ЗАЗМІК', 'Warbirds', 'softserve']
 EXCLUDE_FROM_COMPANY_NAME = {s.lower() for s in EXCLUDE_FROM_COMPANY_NAME}
 
 MINIMAL_SALARY = 3000
