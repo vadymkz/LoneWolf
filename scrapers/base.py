@@ -44,7 +44,7 @@ class BaseScraper(ABC):
             link=link,
             company=company,
             source=self.source.lower(),
-            salary=salary
+            salary=normalize_description(salary)
         )
         return vacancy
 

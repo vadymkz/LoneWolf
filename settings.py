@@ -13,7 +13,7 @@ def get_list_env_var(env_name: str) -> list:
     return [v.strip().casefold() for v in raw if v]
 
 
-def get_int_env(name: str, default: int | None = None) -> int:
+def get_int_env(name: str, default: int = None) -> int:
     value = os.getenv(name)
     if value is None:
         if default is None:
