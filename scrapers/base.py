@@ -26,7 +26,7 @@ class BaseScraper(ABC):
 
     @staticmethod
     def get_http_client(headers: dict) -> httpx.AsyncClient:
-        return httpx.AsyncClient(follow_redirects=True, timeout=5.0, headers=headers)
+        return httpx.AsyncClient(follow_redirects=True, timeout=15.0, headers=headers)
 
     def create_vacancy(
         self,
